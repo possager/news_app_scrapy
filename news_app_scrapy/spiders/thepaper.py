@@ -7,6 +7,11 @@ import datetime
 import time
 import urllib
 import re
+from datetime import timedelta
+import pickle
+
+
+
 
 
 
@@ -23,7 +28,6 @@ class thepaper(scrapy.Spider):
 
 
     def start_requests(self):
-        urls = []
         urlList = self.jiemianDOC.find({'appName': 'thepaper', 'recommend': {'$gt': 0}})
         for url_dict in urlList:
             one_board_info = {
@@ -66,19 +70,88 @@ class thepaper(scrapy.Spider):
             }
             if 'http://www.thepaper.cn/load_index.jsp?' in thisboard_index['url']:
                 try:
-                    yield scrapy.Request(url=thisboard_index['url'],headers=self.headers,meta={'meta_from_index':thisboard_index},callback=self.parse_content_from_index_movie)
+                    yield scrapy.Request(url=thisboard_index['url'],headers=self.headers,meta={'meta_from_index':thisboard_index},callback=self.parse_index_from_board_movie)
                 except:
                     pass
             else:
-                # thread_in_while=threading.Thread(target=get_index_inside_wenben,args=(data_in_while,))
-                # thread_in_while=process.Process(target=get_index_inside_wenben,args=(data_in_while,))
+
                 try:
-                    yield scrapy.Request(url=thisboard_index['url'],headers=self.headers,meta={'meta_from_index':thisboard_index},callback=self.parse_content_from_index_wenben)
+                    yield scrapy.Request(url=thisboard_index['url'],headers=self.headers,meta={'meta_from_index':thisboard_index},callback=self.parse_index_from_board_nomovie)
                 except:
                     pass
 
 
-    def parse_content_from_index_wenben(self,response):
+    def parse_index_from_board_nomovie(self,response):
+        print response.url
+        data_meta_from_board=response.meta
+        if len(response.body)<10:
+            return
+
+
+        # with open('pickle_dict/response_index_board_nomovie','w+') as f:
+        #     pickle.dump(obj=response.selector,file=f)
+
+        for one_url in response.xpath('//body/div'):
+            thisurl=one_url.xpath('.//div[@class="t_news_bg"]/div/a/@href').extract()
+            publish_user=one_url.xpath('//p/a/@href').extract()
+            title=one_url.xpath('//a/text()').extract()
+            try:
+                publish_time=one_url.xpath('.//a/span/text()').extract()
+            except Exception as e:
+                publish_time='00:00:00'
+
+            try:
+                publish_time_date=one_url.xpath('.//span/text()').extract_first()
+                if u'天前' in publish_time_date:
+                    publish_time_date = publish_time_date.replace(u'天前', '')
+                    date_now = datetime.datetime.now()
+                    date_now2 = date_now - timedelta(days=int(publish_time_date))
+                    publish_time_date = date_now2
+                    publish_time_date = str(publish_time_date.strftime('%Y-%m-%d %H:%M'))
+                elif u'小时前' in publish_time_date:
+                    publish_time_date = publish_time_date.replace(u'小时前', '')
+                    date_now = datetime.datetime.now()
+                    date_now2 = date_now - timedelta(hours=int(publish_time_date))
+                    publish_time_date = date_now2
+                    publish_time_date = str(publish_time_date.strftime('%Y-%m-%d %M:%H:%S'))
+                elif u'分钟前' in publish_time_date:
+                    publish_time_date = publish_time_date.replace(u'分钟前', '')
+                    date_now = datetime.datetime.now()
+                    date_now2 = date_now - timedelta(minutes=int(publish_time_date))
+                    publish_time_date = date_now2
+                    publish_time_date = str(publish_time_date.strftime('%Y-%m-%d %M:%H:%S'))
+                else:
+                    date_now=datetime.datetime.now()
+                    publish_time_date=date_now.strftime('%Y-%m-%d %M:%H:%S')
+            except Exception as e:
+                try:
+                    publish_time_date=one_url.xpath('//span/text()').extract()
+                except Exception as e:
+                    print e
+                try:
+                    if len(one_url.xpath('//span/text()'))==10:
+                        publish_time_date=one_url.xpath('//span/text()').extract()
+                    else:
+                        continue
+                except:
+                    continue
+
+            publish_time = publish_time_date + ' ' + publish_time + ':00'
+            id=response.xpath('//h2/a/@id')
+
+
+
+
+
+
+
+    def parse_index_from_board_movie(self,response):
+        print response.url
+
+
+
+
+    def parse_content_from_index_nomovie(self,response):
         data_meta_from_index=response.meta['meta_from_index']
 
         content_div=response.xpath('//div[@class="news_content"]//div[@class="news_part_father"]')
@@ -95,7 +168,6 @@ class thepaper(scrapy.Spider):
         data_meta_from_index['content'] = content_div_str
         data_meta_from_index['like_count'] = like_count_value
         data_meta_from_index['video_urls'] = vedio_urls
-        # data_meta_from_index['source'] = source
 
 
 
@@ -117,5 +189,5 @@ class thepaper(scrapy.Spider):
 
 
 
-    def parse_content_from_index_movie(self,response):
+    def parse_index_from_board_movie(self,response):
         data_meta_from_index=response.meta['meta_from_index']
